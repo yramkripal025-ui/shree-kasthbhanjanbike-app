@@ -1,0 +1,70 @@
+name: Build Kashtbhanjan Motors Invoice APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Validate project
+        run: |
+          test -s www/index.html
+          test -s package.json
+          test -s capacitor.config.json
+          grep -q "Kashtbhanjan Motors" www/index.html
+          grep -q "localStorage" www/index.html
+          grep -q "popstate" www/index.html
+          grep -q "paidall" www/index.html
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Bundle html2canvas locally
+        run: |
+          cp node_modules/html2canvas/dist/html2canvas.min.js www/html2canvas.min.js
+          sed -i 's#https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js#html2canvas.min.js#' www/index.html
+
+      - name: Add Android platform
+        run: npx cap add android
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Build Debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: kashtbhanjan-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Build Release APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: kashtbhanjan-release-unsigned-apk
+          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
