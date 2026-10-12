@@ -1,0 +1,54 @@
+name: Build Kashtbhanjan Motors APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Validate App
+        run: node validate.mjs
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Prepare Capacitor Android
+        run: |
+          npx cap add android
+          npx cap sync android
+
+      - name: Build Release APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease
+
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kashtbhanjan-Motors-Release-APK
+          path: android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
