@@ -11,7 +11,6 @@ permissions:
 
 jobs:
   build:
-    name: Build Android APK
     runs-on: ubuntu-latest
 
     steps:
@@ -21,26 +20,53 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
 
-      - name: Check Required Files
+      - name: Check Project Files
         run: |
-          test -f package.json
-          test -f capacitor.config.json
-          test -f validate.mjs
-          test -f www/index.html
+          test -s package.json
+          test -s capacitor.config.json
+          test -s www/index.html
+          echo "Required project files found."
 
-      - name: Validate App
-        run: node validate.mjs
+      - name: Check Package Configuration
+        run: |
+          node -e "const p=require('./package.json'); if(!p.dependencies?.['@capacitor/core'] || !p.dependencies?.['@capacitor/android'] || !p.devDependencies?.['@capacitor/cli']) throw Error('Capacitor dependencies missing'); console.log('Capacitor dependencies found')"
 
       - name: Install Dependencies
         run: npm install --no-audit --no-fund
+
+      - name: Prepare Invoice Libraries
+        run: |
+          mkdir -p www
+          cp node_modules/html2canvas/dist/html2canvas.min.js www/html2canvas.min.js
+          cp node_modules/jspdf/dist/jspdf.umd.min.js www/jspdf.umd.min.js
+
+          node --input-type=commonjs <<'NODE'
+          const fs = require('fs');
+          const file = 'www/index.html';
+          let html = fs.readFileSync(file, 'utf8');
+
+          if (!html.includes('html2canvas.min.js')) {
+            html = html.replace(
+              /<\/head>/i,
+              '<script src="html2canvas.min.js"></script><script src="jspdf.umd.min.js"></script></head>'
+            );
+          }
+
+          if (!html.includes('html2canvas.min.js')) {
+            throw new Error('Could not add invoice libraries to index.html');
+          }
+
+          fs.writeFileSync(file, html);
+          console.log('Invoice libraries prepared');
+          NODE
 
       - name: Add Android Platform
         run: npx cap add android
@@ -48,15 +74,24 @@ jobs:
       - name: Sync Android Project
         run: npx cap sync android
 
-      - name: Build Release APK
-        run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleRelease
+      - name: Build Debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
 
-      - name: Upload APK
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kashtbhanjan-Motors-Debug-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Build Release APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Upload Release APK
         uses: actions/upload-artifact@v4
         with:
           name: Kashtbhanjan-Motors-Release-APK
-          path: android/app/build/outputs/apk/release/*.apk
+          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
           if-no-files-found: error
